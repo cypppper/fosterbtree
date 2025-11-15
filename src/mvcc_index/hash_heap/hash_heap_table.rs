@@ -448,10 +448,18 @@ impl<T: MemPool + 'static> MvccIndex<T> for HeapHashTable<T> {
     ) -> Result<Vec<(Self::PKey, Self::Value)>, Self::Error> {
         let idx = self.get_bucket_index(key);
         let chain = &self.bucket_entries[idx];
-        let mut res = vec![];
-        chain.heap_scan_key_no_repair(key, &ts, &mut res)?;
+        let mut best_candidates = HashMap::new();
+      
+  
+        let partition_scanner = chain.scan_key_vec_read_repair(key, &ts, None)?;
+        // Iterate over all entries from the chain.
+        for entry in partition_scanner {
+            let (pkey, value) = entry;
+            best_candidates.entry(pkey).or_insert(value);
+        }
 
-        Ok(res)
+        Ok(best_candidates.into_iter().collect())
+
     }
 
     fn scan_key_vec_read_repair(

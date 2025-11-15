@@ -233,7 +233,35 @@ fn run_and_collect_stat(bench: &TxBench, cli: &Cli) {
 
 fn main() {
     let mut cli = Cli::parse();
+    if cli.manual_flag.is_some() && !cli.manual_flag.as_ref().unwrap().starts_with("second") {
+        let mut bench = TxBench::new(cli.clone());
+        bench.print_cli();
+        bench.gen_manual_txs();
+        bench.print_txs();
 
+        if cli.space_stat.is_some() {
+            // space stat
+            run_and_collect_stat(&bench, &cli);
+        } else {
+            run_no_repair(&bench, &cli);
+            run_three_repairs(&bench, &cli);
+        }
+        return;
+    } else if cli.manual_flag.is_some() {
+        let mut bench = TxBench::new(cli.clone());
+        bench.print_cli();
+        bench.gen_manual_txs_deltascan_before_update();
+        bench.print_txs();
+
+        if cli.space_stat.is_some() {
+            // space stat
+            run_and_collect_stat(&bench, &cli);
+        } else {
+            run_no_repair(&bench, &cli);
+            run_three_repairs(&bench, &cli);
+        }
+        return;
+    }
 
     assert!(!cli.txn_gc_ratio.is_none());
     if cli.analytical_ratio.is_some() {

@@ -90,6 +90,7 @@ impl<T: MemPool + 'static> MultiVersionJoinTable for ChainedHashTable<T> {
     fn after_mark_ts(&self, ts: u64) {
         // for cache warm-up
         let _ = <Self as MvccIndex<_>>::scan(self, ts).unwrap();
+        let _ = <Self as MvccIndex<_>>::scan(self, ts).unwrap();
     }
 
     fn scan_delta(
@@ -171,7 +172,7 @@ impl<T: MemPool + 'static> MultiVersionJoinTable for HeapHashTable<T> {
     fn mark_ts(&self, ts: u64) {}
     fn after_mark_ts(&self, ts: u64) {
         // for cache warm-up
-        let _ = <Self as MvccIndex<_>>::scan(self, ts).unwrap();
+        let _ = <Self as MvccIndex<_>>::scan(self, 1).unwrap();
     }
 
     fn scan_delta(
@@ -264,7 +265,7 @@ impl<T: MemPool + 'static> MultiVersionJoinTable for TsPartitionedTable<T> {
 
     fn after_mark_ts(&self, ts: u64) {
         // for cache warm-up
-        let _ = <Self as MvccIndex<_>>::scan(self, ts).unwrap();
+        let _ = <Self as MvccIndex<_>>::scan(self, 1).unwrap();
     }
 
     fn scan_delta(
@@ -317,7 +318,9 @@ impl<T: MemPool + 'static> MultiVersionJoinTable for TsPartitionedTable<T> {
 
 // NAIVE
 impl<T: MemPool + 'static> MultiVersionJoinTable for NaiveMvHashTable<T> {
-    fn after_mark_ts(&self, ts: Timestamp) {}
+    fn after_mark_ts(&self, ts: Timestamp) {
+        // NaiveMvHashTable::scan(&self, 1);
+    }
     fn insert(&self, key: &[u8], pkey: &[u8], value: &[u8]) {
         NaiveMvHashTable::add_insert_rec_new(&self, key, pkey, value);
     }

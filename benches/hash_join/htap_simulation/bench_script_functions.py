@@ -153,7 +153,7 @@ def prepare_plot_data(df):
             else:
                 count_str = str(count)
             optional = f"cnt: {count_str}"
-        elif row['tx_type'] in ["Scan", "MarkTs", "GbgCollect"] and pd.notnull(row['read_ts']):
+        elif row['tx_type'] in ["RecentScan", "HistoryScan", "MarkTs", "GbgCollect"] and pd.notnull(row['read_ts']):
             optional = f"ts: {int(row['read_ts'])}"
         elif row['tx_type'] in ["DeltaScan"] and pd.notnull(row['from_ts']) and pd.notnull(row['to_ts']):
             optional = f"ts: ({int(row['from_ts'])}, {int(row['to_ts'])})"
@@ -172,7 +172,8 @@ def prepare_plot_data(df):
         tx_type = row['tx_type']
         if row['tx_type'] in ["DeltaScan"]:
             tx_type = "DelSc"
-        label = f"{idx}\n{tx_type}\n{optional}"
+        # label = f"{idx}\n{tx_type}\n{optional}"
+        label = f"{idx}\n{tx_type}"
         label_dict = {"idx": idx, "tx_type": tx_type, "optional":optional}
         x_labels.append(label)
         dict_labels.append(label_dict)

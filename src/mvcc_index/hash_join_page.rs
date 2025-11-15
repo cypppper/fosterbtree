@@ -1650,6 +1650,13 @@ impl HashJoinPage for Page {
         for slot_idx in 0..self.slot_count() {
             let slot = self.unsafe_slot(slot_idx);
 
+            if slot.start_ts() > ts {
+                continue;
+            }
+            if slot.end_ts() != Timestamp::MAX && slot.end_ts() <= ts {
+                continue;
+            }
+
             // 1) Compare prefix, etc. (same as your existing logic)
             let slot_key_len = slot.key_size();
             if slot_key_len != search_key.len() {
@@ -1665,12 +1672,8 @@ impl HashJoinPage for Page {
             // 2) If prefix matches, load the record
             let rec = self.record_ref_from_slot(&slot);
             if rec.key() == search_key {
-                let start_ts = slot.start_ts();
-                if start_ts <= ts {
-                    let pkey = rec.pkey();
-
-                    res.insert(pkey.to_vec(), rec.val().to_vec());
-                }
+                let pkey = rec.pkey();
+                res.insert(pkey.to_vec(), rec.val().to_vec());
             }
         }
 

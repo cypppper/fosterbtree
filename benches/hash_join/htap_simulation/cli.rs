@@ -54,7 +54,7 @@ pub struct Cli {
 
     #[arg(long = "txn-delta-ratio")]
     pub txn_delta_ratio: Option<f64>,
-    
+
     #[arg(long = "txn-gc-ratio")]
     pub txn_gc_ratio: Option<f64>,
 
@@ -63,4 +63,7 @@ pub struct Cli {
 
     #[arg(long = "analytical-uniform")]
     pub analytical_uniform: Option<String>,
+
+    #[arg(long = "manual-flag")]
+    pub manual_flag: Option<String>,
 }

@@ -6,7 +6,6 @@ use std::{
     time::Instant,
 };
 
-
 use anyhow::Error;
 use fbtree::{mvcc_index::TxId, prelude::Timestamp};
 use rand::{
@@ -219,7 +218,8 @@ impl TxBench {
 
     pub fn gen_update_tx(&mut self, update_count: usize) {
         let (tx_id, tx_ts) = self.gen_new_tx();
-        self.history_ts_candidates.extend_from_slice(&self.recent_ts_candidates);
+        self.history_ts_candidates
+            .extend_from_slice(&self.recent_ts_candidates);
         self.recent_ts_candidates.clear();
         let mut ops = Vec::new();
         let mut pkey_set = HashSet::new();
@@ -338,6 +338,34 @@ impl TxBench {
         self.txs.push(tx);
     }
 
+    pub fn gen_delta_scan_tx_fixed(&mut self, start_idx: usize) -> bool {
+        let all_ts = &self.read_ts_candidates[start_idx..];
+
+        if all_ts.len() < 2 {
+            println!("gen failed!!!");
+            return false;
+        }
+
+        let (tx_id, tx_ts) = self.gen_new_tx();
+        let all_ts = &self.read_ts_candidates[start_idx..];
+        // randomly select 2 different timestamps
+        let mut selected_ts = all_ts.choose_multiple(&mut self.rng, 2);
+        let read_ts1 = &all_ts[0];
+        let read_ts2 = &all_ts[1];
+        assert!(
+            read_ts1 != read_ts2,
+            "Selected timestamps must be different"
+        );
+        let from_ts = read_ts1.min(read_ts2);
+        let to_ts = read_ts1.max(read_ts2);
+
+        let op = TxOperation::new_delta_scan(tx_id, tx_ts, *from_ts, *to_ts);
+        let tx = Tx::new(OperationType::DeltaScan, tx_id, tx_ts, vec![op]);
+        self.txs.push(tx.clone());
+        self.read_txs.push(tx);
+        return true;
+    }
+
     pub fn gen_delta_scan_tx(&mut self, start_idx: usize) -> bool {
         let all_ts = &self.read_ts_candidates[start_idx..];
 
@@ -405,7 +433,10 @@ impl TxBench {
         rng: &mut SmallRng,
     ) -> OperationType {
         let x: f64 = rng.gen_range(0.0..1.0); // uniform [0,1)
-        assert!((update_ratio + probe_ratio + scan_ratio + delta_ratio + gc_ratio - 1.0f64).abs() < 1e-6);
+        assert!(
+            (update_ratio + probe_ratio + scan_ratio + delta_ratio + gc_ratio - 1.0f64).abs()
+                < 1e-6
+        );
 
         if x < update_ratio {
             OperationType::Update
@@ -413,7 +444,7 @@ impl TxBench {
             OperationType::Probe
         } else if x < update_ratio + probe_ratio + scan_ratio {
             OperationType::Scan
-        } else if x < update_ratio + probe_ratio + scan_ratio + delta_ratio{
+        } else if x < update_ratio + probe_ratio + scan_ratio + delta_ratio {
             OperationType::DeltaScan
         } else {
             OperationType::GbgCollect
@@ -430,7 +461,9 @@ impl TxBench {
         rng: &mut SmallRng,
         scan_reuse_ratio: f64,
     ) -> Vec<OperationType> {
-        assert!((update_ratio + probe_ratio + scan_ratio + delta_ratio + gc_ratio - 1.0).abs() < 1e-6);
+        assert!(
+            (update_ratio + probe_ratio + scan_ratio + delta_ratio + gc_ratio - 1.0).abs() < 1e-6
+        );
 
         let mut ops = Vec::with_capacity(txn_count);
 
@@ -454,6 +487,141 @@ impl TxBench {
         ops
     }
 
+    pub fn gen_manual_txs(&mut self) {
+        // InitLoad->Update ->BuildSnap -> RecentScan -> RecentScan ->
+        // Update -> Build -> RS -> HS -> Probe ->Delta -> Update -> Delta -> GC
+        self.gen_initial_insert_from_cli();
+        {
+            let update_count =
+                (self.cli.update_ratio * self.data_source.get_custoemr_vec().len() as f64) as usize;
+            self.gen_update_tx(update_count);
+        }
+        self.gen_mark_ts_txs();
+        self.gen_scan_txs_latest();
+        self.gen_scan_txs_latest();
+        {
+            let update_count =
+                (self.cli.update_ratio * self.data_source.get_custoemr_vec().len() as f64) as usize;
+            self.gen_update_tx(update_count);
+        }
+        {
+            let update_count =
+                (self.cli.update_ratio * self.data_source.get_custoemr_vec().len() as f64) as usize;
+            self.gen_update_tx(update_count);
+        }
+        {
+            let update_count =
+                (self.cli.update_ratio * self.data_source.get_custoemr_vec().len() as f64) as usize;
+            self.gen_update_tx(update_count);
+        }
+        {
+            let update_count =
+                (self.cli.update_ratio * self.data_source.get_custoemr_vec().len() as f64) as usize;
+            self.gen_update_tx(update_count);
+        }
+        {
+            let update_count =
+                (self.cli.update_ratio * self.data_source.get_custoemr_vec().len() as f64) as usize;
+            self.gen_update_tx(update_count);
+        }
+        {
+            let update_count =
+                (self.cli.update_ratio * self.data_source.get_custoemr_vec().len() as f64) as usize;
+            self.gen_update_tx(update_count);
+        }
+        {
+            let update_count =
+                (self.cli.update_ratio * self.data_source.get_custoemr_vec().len() as f64) as usize;
+            self.gen_update_tx(update_count);
+        }
+        {
+            let update_count =
+                (self.cli.update_ratio * self.data_source.get_custoemr_vec().len() as f64) as usize;
+            self.gen_update_tx(update_count);
+        }
+        self.gen_mark_ts_txs();
+        self.gen_scan_txs_latest();
+        self.gen_scan_txs_history();
+        
+        self.gen_delta_scan_tx(0);
+        {
+            let update_count =
+                (self.cli.update_ratio * self.data_source.get_custoemr_vec().len() as f64) as usize;
+            self.gen_update_tx(update_count);
+        }
+        self.gen_delta_scan_tx(0);
+        {
+            let probe_count =
+                (self.cli.probe_ratio * self.data_source.get_custoemr_vec().len() as f64) as usize;
+            let probe_ts = self
+                .read_ts_candidates
+                .choose(&mut self.rng)
+                .unwrap()
+                .to_owned();
+            self.gen_probe_tx(probe_count, probe_ts);
+        }
+        self.gen_gc_txs_force();
+    }
+
+    pub fn gen_manual_txs_deltascan_before_update(&mut self) {
+        // InitLoad->Update ->BuildSnap -> RecentScan -> RecentScan ->
+        // Update -> Build -> RS -> HS -> Probe ->Delta -> Update -> Delta -> GC
+        self.gen_initial_insert_from_cli();
+        {
+            let update_count =
+                (self.cli.update_ratio * self.data_source.get_custoemr_vec().len() as f64) as usize;
+            self.gen_update_tx(update_count);
+        }
+        {
+            let update_count =
+                (self.cli.update_ratio * self.data_source.get_custoemr_vec().len() as f64) as usize;
+            self.gen_update_tx(update_count);
+        }
+        {
+            let update_count =
+                (self.cli.update_ratio * self.data_source.get_custoemr_vec().len() as f64) as usize;
+            self.gen_update_tx(update_count);
+        }
+        {
+            let update_count =
+                (self.cli.update_ratio * self.data_source.get_custoemr_vec().len() as f64) as usize;
+            self.gen_update_tx(update_count);
+        }
+
+        self.gen_mark_ts_txs();
+        self.gen_scan_txs_latest();
+        self.gen_scan_txs_latest();
+        {
+            let update_count =
+                (self.cli.update_ratio * self.data_source.get_custoemr_vec().len() as f64) as usize;
+            self.gen_update_tx(update_count);
+        }
+        {
+            let update_count =
+                (self.cli.update_ratio * self.data_source.get_custoemr_vec().len() as f64) as usize;
+            self.gen_update_tx(update_count);
+        }
+        self.gen_mark_ts_txs();
+        self.gen_scan_txs_latest();
+        self.gen_scan_txs_history();
+        
+        self.gen_delta_scan_tx_fixed(0);
+        self.gen_delta_scan_tx_fixed(0);
+
+        
+        {
+            let probe_count =
+                (self.cli.probe_ratio * self.data_source.get_custoemr_vec().len() as f64) as usize;
+            let probe_ts = self
+                .read_ts_candidates
+                .choose(&mut self.rng)
+                .unwrap()
+                .to_owned();
+            self.gen_probe_tx(probe_count, probe_ts);
+        }
+        self.gen_gc_txs_force();
+    }
+
     pub fn gen_random_txs(&mut self) {
         // generate random transactions based on the cli parameters
 
@@ -461,38 +629,43 @@ impl TxBench {
         self.gen_initial_insert_from_cli();
 
         // load markts txn
-        if (*self.cli.analytical_ratio.as_ref().unwrap() - 0.0).abs() > 1e-6 { // not W-ONLY
+        if (*self.cli.analytical_ratio.as_ref().unwrap() - 0.0).abs() > 1e-6 {
+            // not W-ONLY
             self.gen_mark_ts_txs();
         }
-        
-        
 
-        let update_count = (self.cli.update_ratio
-            * self.data_source.get_custoemr_vec().len() as f64)
-            as usize;
+        let update_count =
+            (self.cli.update_ratio * self.data_source.get_custoemr_vec().len() as f64) as usize;
         self.gen_update_tx(update_count);
 
-
-        if ((*self.cli.analytical_ratio.as_ref().unwrap() - 0.0).abs() > 1e-6) // not W-ONLY
+        if ((*self.cli.analytical_ratio.as_ref().unwrap() - 0.0).abs() > 1e-6)
+        // not W-ONLY
         {
             self.gen_mark_ts_txs();
-            if self.cli.txn_scan_ratio.as_ref().unwrap().to_owned() > 0.02 && self.cli.scan_reuse_ratio < 0.999 { // not 100% HISTORY SCAN
+            if self.cli.txn_scan_ratio.as_ref().unwrap().to_owned() > 0.02
+                && self.cli.scan_reuse_ratio < 0.999
+            {
+                // not 100% HISTORY SCAN
                 self.gen_scan_txs_latest();
             } else {
                 self.gen_scan_txs_history();
             }
         }
 
-        if (*self.cli.analytical_ratio.as_ref().unwrap() - 1.0).abs() > 1e-6 { // NOT R-ONLY
-            let update_count = (self.cli.update_ratio
-                * self.data_source.get_custoemr_vec().len() as f64)
-                as usize;
+        if (*self.cli.analytical_ratio.as_ref().unwrap() - 1.0).abs() > 1e-6 {
+            // NOT R-ONLY
+            let update_count =
+                (self.cli.update_ratio * self.data_source.get_custoemr_vec().len() as f64) as usize;
             self.gen_update_tx(update_count);
 
-            if ((*self.cli.analytical_ratio.as_ref().unwrap() - 0.0).abs() > 1e-6) // not W-ONLY
+            if ((*self.cli.analytical_ratio.as_ref().unwrap() - 0.0).abs() > 1e-6)
+            // not W-ONLY
             {
                 self.gen_mark_ts_txs();
-                if self.cli.txn_scan_ratio.as_ref().unwrap().to_owned() > 0.02 && self.cli.scan_reuse_ratio < 0.999 { // not 100% HISTORY SCAN
+                if self.cli.txn_scan_ratio.as_ref().unwrap().to_owned() > 0.02
+                    && self.cli.scan_reuse_ratio < 0.999
+                {
+                    // not 100% HISTORY SCAN
                     self.gen_scan_txs_latest();
                 } else {
                     self.gen_scan_txs_history();
@@ -501,15 +674,15 @@ impl TxBench {
         }
 
         let ops = Self::generate_tx_sequence(
-            self.cli.txn_count, 
+            self.cli.txn_count,
             self.cli.txn_update_ratio.as_ref().unwrap().to_owned(),
-                self.cli.txn_probe_ratio.as_ref().unwrap().to_owned(),
-                self.cli.txn_scan_ratio.as_ref().unwrap().to_owned(),
-                self.cli.txn_delta_ratio.as_ref().unwrap().to_owned(),
-                self.cli.txn_gc_ratio.as_ref().unwrap().to_owned(),
-                &mut self.rng,
-                self.cli.scan_reuse_ratio.to_owned(),
-            );
+            self.cli.txn_probe_ratio.as_ref().unwrap().to_owned(),
+            self.cli.txn_scan_ratio.as_ref().unwrap().to_owned(),
+            self.cli.txn_delta_ratio.as_ref().unwrap().to_owned(),
+            self.cli.txn_gc_ratio.as_ref().unwrap().to_owned(),
+            &mut self.rng,
+            self.cli.scan_reuse_ratio.to_owned(),
+        );
         for i in 0..ops.len() {
             let tx_type = &ops[i];
 
@@ -543,7 +716,8 @@ impl TxBench {
                 }
                 OperationType::GbgCollect => {
                     if (*self.cli.analytical_ratio.as_ref().unwrap() - 0.0).abs() > 1e-6 // NOT W-ONLY
-                        &&  *self.cli.analytical_ratio.as_ref().unwrap() < 0.985 // NOT R-ONLY
+                        &&  *self.cli.analytical_ratio.as_ref().unwrap() < 0.985
+                    // NOT R-ONLY
                     {
                         self.gen_gc_txs();
                     }
@@ -573,8 +747,19 @@ impl TxBench {
         self.txs.push(tx);
     }
 
-    pub fn gen_manual_txs(&mut self) {
-        todo!()
+    pub fn gen_gc_txs_force(&mut self) {
+        let tss = &mut self.read_ts_candidates;
+        assert_eq!(tss.iter().min(), tss.first());
+        let (tx_id, tx_ts) = self.gen_new_tx();
+        let tss = &mut self.read_ts_candidates;
+        let min_ts = tss.iter().min().unwrap().to_owned();
+        let (_first, right) = tss.split_first().unwrap();
+        let new_tss = right.to_owned();
+        self.read_ts_candidates = new_tss;
+
+        let op = TxOperation::new_gc(tx_id, tx_ts, min_ts);
+        let tx = Tx::new(OperationType::GbgCollect, tx_id, tx_ts, vec![op]);
+        self.txs.push(tx);
     }
 
     pub fn run_tx_no_repair(
@@ -584,7 +769,7 @@ impl TxBench {
     ) -> Result<Duration, Error> {
         let tx = &self.txs[txs_idx as usize];
         let start = Instant::now();
-        let mut is_need_scan_warpup = false;
+        let mut is_need_scan_warmup = true;
         match tx.tx_type {
             OperationType::InitLoad => {
                 hash_join_table.begin_txs(OperationType::InitLoad).unwrap();
@@ -600,12 +785,13 @@ impl TxBench {
             OperationType::MarkTs => {
                 let ts = tx.tx_ts;
                 hash_join_table.mark_ts(ts);
-                is_need_scan_warpup = true;
+                is_need_scan_warmup = true;
             }
             OperationType::Probe => {
                 for op in &tx.ops {
                     let _ = hash_join_table.probe(&op.join_key, op.read_ts);
                 }
+                is_need_scan_warmup = true;
             }
             OperationType::Update => {
                 hash_join_table.begin_txs(OperationType::Update).unwrap();
@@ -632,6 +818,7 @@ impl TxBench {
                         assert_eq!(entry.2.len(), 688);
                     }
                 }
+                is_need_scan_warmup = true;
             }
             OperationType::GbgCollect => {
                 assert_eq!(tx.ops.len(), 1);
@@ -685,8 +872,9 @@ impl TxBench {
                 println!("Garbage collection read_ts: {:?}", tx.ops[0].read_ts);
             }
         }
-        if is_need_scan_warpup {
+        if is_need_scan_warmup {
             hash_join_table.after_mark_ts(tx.tx_ts);
+            // is_need_scan_warmup = false;
         }
         Ok(elapsed)
     }
@@ -698,7 +886,7 @@ impl TxBench {
     ) -> Result<Duration, Error> {
         let tx = &self.txs[txs_idx as usize];
         let start = Instant::now();
-        let mut is_need_scan_warpup = false;
+        let mut is_need_scan_warmup = true;
 
         match tx.tx_type {
             OperationType::InitLoad => {
@@ -714,11 +902,12 @@ impl TxBench {
                 for op in &tx.ops {
                     let _ = hash_join_table.probe(&op.join_key, op.read_ts);
                 }
+                is_need_scan_warmup = true;
             }
             OperationType::MarkTs => {
                 let ts = tx.tx_ts;
                 hash_join_table.mark_ts(ts);
-                is_need_scan_warpup = true;
+                is_need_scan_warmup = true;
             }
             OperationType::Update => {
                 hash_join_table.begin_txs(OperationType::Update).unwrap();
@@ -745,6 +934,7 @@ impl TxBench {
                         assert_eq!(entry.2.len(), 688);
                     }
                 }
+                is_need_scan_warmup = true;
             }
             OperationType::GbgCollect => {
                 assert_eq!(tx.ops.len(), 1);
@@ -798,8 +988,9 @@ impl TxBench {
                 println!("Garbage collection read_ts: {:?}", tx.ops[0].read_ts);
             }
         }
-        if is_need_scan_warpup {
+        if is_need_scan_warmup {
             hash_join_table.after_mark_ts(tx.tx_ts);
+             // is_need_scan_warmup = false;
         }
         Ok(elapsed)
     }
@@ -811,12 +1002,13 @@ impl TxBench {
     ) -> Result<Duration, Error> {
         let tx = &self.txs[txs_idx as usize];
         let start = Instant::now();
-        let mut is_need_scan_warmup = false;
+        let mut is_need_scan_warmup = true;
         match tx.tx_type {
             OperationType::Probe => {
                 for op in &tx.ops {
                     let _ = hash_join_table.probe(&op.join_key, op.read_ts);
                 }
+                is_need_scan_warmup = true;
             }
             OperationType::InitLoad => {
                 for op in self.data_source.get_custoemr_vec() {
@@ -862,6 +1054,7 @@ impl TxBench {
                         assert_eq!(entry.2.len(), 688);
                     }
                 }
+                is_need_scan_warmup = true;
             }
             OperationType::GbgCollect => {
                 assert_eq!(tx.ops.len(), 1);
@@ -918,6 +1111,7 @@ impl TxBench {
 
         if is_need_scan_warmup {
             hash_join_table.after_mark_ts(tx.tx_ts);
+            // is_need_scan_warmup = false;
         }
         Ok(elapsed)
     }
